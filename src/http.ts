@@ -261,6 +261,17 @@ export async function startHttpServer(): Promise<void> {
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
 
+  // ── Debug: Log every incoming request ──────────────────────────────────────
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    log("INFO", `${req.method} ${req.path}`, {
+      contentType: req.headers["content-type"],
+      hasAuth: !!req.headers.authorization,
+      sessionId: req.headers["mcp-session-id"] ? String(req.headers["mcp-session-id"]).slice(0, 8) + "…" : null,
+      bodyMethod: (req.body as Record<string, unknown>)?.method ?? null,
+    });
+    next();
+  });
+
   // ── Rate Limiters ───────────────────────────────────────────────────────────
   // OAuth endpoints: 60 req/min per IP (prevents brute-force on /authorize)
   const authLimiter = rateLimit({
@@ -445,8 +456,12 @@ export async function startHttpServer(): Promise<void> {
     });
   });
 
-  // ── MCP: POST (Initialize / Tool Calls) ────────────────────────────────────
-  app.post("/mcp", mcpLimiter, requireAuth, async (req: Request, res: Response) => {
+  // ── MCP handlers — registered at both '/' and '/mcp' ─────────────────────
+  // ChatGPT registers the connector at the base URL (https://mcp.bloghunch.com)
+  // and POSTs MCP requests to that root path. We also support '/mcp' for
+  // direct clients and Claude integrations that specify the full path.
+
+  const handleMcpPost = async (req: Request, res: Response) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     const { apiKey, subdomain } = (req as Request & { tokenData: TokenData }).tokenData;
 
@@ -510,10 +525,9 @@ export async function startHttpServer(): Promise<void> {
 
     await mcpServer.connect(transport);
     await transport.handleRequest(req, res, req.body);
-  });
+  };
 
-  // ── MCP: GET (SSE stream) ───────────────────────────────────────────────────
-  app.get("/mcp", requireAuth, async (req: Request, res: Response) => {
+  const handleMcpGet = async (req: Request, res: Response) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     if (!sessionId || !sessions.has(sessionId)) {
       log("WARN", "GET /mcp: session not found", { sessionId: sessionId?.slice(0, 8) });
@@ -521,10 +535,9 @@ export async function startHttpServer(): Promise<void> {
       return;
     }
     await sessions.get(sessionId)!.transport.handleRequest(req, res);
-  });
+  };
 
-  // ── MCP: DELETE (terminate session) ────────────────────────────────────────
-  app.delete("/mcp", requireAuth, async (req: Request, res: Response) => {
+  const handleMcpDelete = async (req: Request, res: Response) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     if (sessionId && sessions.has(sessionId)) {
       const session = sessions.get(sessionId)!;
@@ -534,7 +547,17 @@ export async function startHttpServer(): Promise<void> {
       return;
     }
     res.status(404).json({ error: "session_not_found" });
-  });
+  };
+
+  // Register at root '/' — ChatGPT registers base URL and POSTs to root
+  app.post("/",    mcpLimiter, requireAuth, handleMcpPost);
+  app.get("/",     requireAuth, handleMcpGet);
+  app.delete("/",  requireAuth, handleMcpDelete);
+
+  // Register at '/mcp' — explicit path for direct/manual integrations
+  app.post("/mcp",   mcpLimiter, requireAuth, handleMcpPost);
+  app.get("/mcp",    requireAuth, handleMcpGet);
+  app.delete("/mcp", requireAuth, handleMcpDelete);
 
   // ── Start ───────────────────────────────────────────────────────────────────
   app.listen(PORT, () => {
