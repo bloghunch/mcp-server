@@ -224,9 +224,13 @@ function loginPage(opts: {
 // ─── Auth Middleware ───────────────────────────────────────────────────────────
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
+  // WWW-Authenticate tells ChatGPT exactly how to auth on retry
+  const wwwAuth = `Bearer realm="Bloghunch MCP", resource_metadata="${MCP_BASE_URL}/.well-known/oauth-protected-resource"`;
+
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
     log("WARN", "auth: missing Bearer token", { path: req.path, ip: req.ip });
+    res.setHeader("WWW-Authenticate", wwwAuth);
     res.status(401).json({
       error: "unauthorized",
       hint: "Reconnect Bloghunch in ChatGPT → Settings → Apps",
@@ -241,6 +245,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
       tokenPrefix: rawToken.slice(0, 8) + "…",
       ip: req.ip,
     });
+    res.setHeader("WWW-Authenticate", wwwAuth);
     res.status(401).json({
       error: "invalid_token",
       error_description:
@@ -338,11 +343,35 @@ export async function startHttpServer(): Promise<void> {
       issuer: MCP_BASE_URL,
       authorization_endpoint: `${MCP_BASE_URL}/authorize`,
       token_endpoint: `${MCP_BASE_URL}/token`,
+      registration_endpoint: `${MCP_BASE_URL}/register`,
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code"],
       code_challenge_methods_supported: ["S256", "plain"],
       token_endpoint_auth_methods_supported: ["none"],
       scopes_supported: ["mcp"],
+    });
+  });
+
+  // ── Dynamic Client Registration (RFC 7591) ─────────────────────────────────
+  // OpenAI's platform scanner calls POST /register to auto-issue a client_id.
+  // We generate a UUID client_id on the fly; our server doesn't validate it
+  // during auth (security comes from the API key + PKCE flow).
+  app.post("/register", authLimiter, (req: Request, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const clientId = randomUUID();
+    log("INFO", "DCR: client registered", {
+      clientName: body.client_name ?? "unknown",
+      clientId: clientId.slice(0, 8) + "…",
+    });
+    res.status(201).json({
+      client_id: clientId,
+      client_name: body.client_name ?? "ChatGPT",
+      redirect_uris: body.redirect_uris ?? [],
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      code_challenge_methods_supported: ["S256"],
+      client_id_issued_at: Math.floor(Date.now() / 1000),
     });
   });
 
