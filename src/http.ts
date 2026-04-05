@@ -317,6 +317,12 @@ export async function startHttpServer(): Promise<void> {
     });
   });
 
+  // ── OpenAI Domain Verification ─────────────────────────────────────────────
+  // ChatGPT requires this to verify ownership of the domain
+  app.get("/.well-known/openai-apps-challenge", (_req, res) => {
+    res.type("text/plain").send(process.env.OPENAI_CHALLENGE_TOKEN || "");
+  });
+
   // ── OAuth Protected Resource (RFC 9728) ───────────────────────────────────
   // ChatGPT probes this before OAuth to find the authorization server
   app.get("/.well-known/oauth-protected-resource", (_req, res) => {
