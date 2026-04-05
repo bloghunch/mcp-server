@@ -1,97 +1,152 @@
-# Bloghunch Model Context Protocol (MCP) Server
+# Bloghunch MCP Server
 
-Connect your AI agent (Claude, ChatGPT, etc.) directly to your Bloghunch publication to automate high-quality content creation, distribution, and analytics.
+Connect your AI assistant directly to your Bloghunch publication to automate content creation, analytics, and distribution.
 
-## Core Features
+Supports **two transport modes**:
+- **STDIO** — Claude Desktop & Cursor (local, no hosting needed)
+- **HTTP** — ChatGPT (remote, requires public HTTPS URL)
 
--   **High-Quality "Pro" Content Generation**: Orchestrates a full AI pipeline (SEO Brief → Web Research → Fact-Checked Generation → Plagiarism Check) with a single command.
--   **SEO Topic Discovery**: Analyzes your Google Search Console data via AI to find high-potential, low-difficulty topic opportunities.
--   **Social Media "Social Echo"**: Instantly generates Twitter threads, LinkedIn posts, and newsletter teasers for any existing blog post.
--   **AI Studio Brainstorming**: Brainstorm ideas, draft outlines, and generate SEO-optimized content sections on the fly.
--   **Real-time Insights**: Get snapshot analytics (page views, subscriber growth, traffic sources) powered by Plausible integration.
--   **Metered & Billing Integrated**: Every AI operation correctly deducts usage credits based on your active Bloghunch plan.
+---
 
-## Installation for Claude Desktop
+## Tools Available
 
-### macOS
-If you are a Mac user with Claude Desktop:
+| Tool | Description |
+|---|---|
+| `bh_get_stats` | Analytics snapshot (pageviews, subscribers, posts) |
+| `bh_list_posts` | List posts with status/keyword filter |
+| `bh_create_post` | Create a post — provide `topic` for full AI generation |
+| `bh_generate_ideas` | Brainstorm 5 post angles for any topic |
+| `bh_list_subscribers` | List newsletter subscribers |
+| `bh_social_echo` | Generate Twitter, LinkedIn, newsletter assets for a post |
+| `bh_discover_topics` | Trigger GSC-powered SEO topic discovery |
+| `bh_get_topic_discoveries` | List discovered topic opportunities |
 
-1.  **Configure Environment**:
-    Create a `.env` file in the `mcp-server` directory (see [Configuration](#configuration) below).
+---
 
-2.  **Auto-Install**:
-    ```bash
-    npm run install-claude
-    ```
-    This script will build the project and automatically configure your `claude_desktop_config.json`.
+## Installation — Claude Desktop & Cursor (STDIO)
 
-3.  **Restart Claude Desktop**.
+### 1. Configure `.env`
 
-### Windows
-If you are a Windows user with Claude Desktop:
+```bash
+cp .env.example .env
+```
 
-1.  **Configure Environment**:
-    Create a `.env` file in the `mcp-server` directory (see [Configuration](#configuration) below).
+Fill in:
+```
+BLOGHUNCH_API_KEY=bh_live_xxxxxxxxxxxx
+BLOGHUNCH_SUBDOMAIN=your-subdomain
+BLOGHUNCH_API_URL=https://api.bloghunch.com/api/v1
+```
 
-2.  **Manual Configuration**:
-    Open your Claude Desktop configuration file at:
-    `%APPDATA%\Claude\claude_desktop_config.json`
+Get your API key from [Settings → Developers](https://app.bloghunch.com/app/settings/developers).
 
-3.  **Add MCP Server**:
-    Insert the following into the `mcpServers` object (ensure you use double backslashes `\\` for the path):
-    ```json
-    "mcpServers": {
-      "bloghunch": {
-        "command": "node",
-        "args": ["C:\\path\\to\\bloghunch\\mcp-server\\dist\\index.js"],
-        "env": {
-          "BLOGHUNCH_API_KEY": "YOUR_API_KEY",
-          "BLOGHUNCH_API_URL": "https://api.bloghunch.com/api/v1",
-          "BLOGHUNCH_SUBDOMAIN": "your-subdomain"
-        }
+### 2. Build & Auto-Install (macOS)
+
+```bash
+npm install
+npm run build
+npm run install-claude
+```
+
+Then restart Claude Desktop.
+
+### 3. Manual Configuration (Windows / Cursor)
+
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`) or Cursor MCP config:
+
+```json
+{
+  "mcpServers": {
+    "bloghunch": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-server/dist/index.js"],
+      "env": {
+        "BLOGHUNCH_API_KEY": "bh_live_xxxxxxxxxxxx",
+        "BLOGHUNCH_SUBDOMAIN": "your-subdomain",
+        "BLOGHUNCH_API_URL": "https://api.bloghunch.com/api/v1"
       }
     }
-    ```
+  }
+}
+```
 
-4.  **Restart Claude Desktop**.
+---
 
-## Configuration
+## Installation — ChatGPT (HTTP mode)
 
-The server requires the following environment variables:
+ChatGPT requires a **publicly hosted HTTPS server**. Run this on your VPS behind Nginx/Caddy.
 
-| Variable | Description |
-| :--- | :--- |
-| `BLOGHUNCH_API_KEY` | Your Bloghunch Developer API Key. |
-| `BLOGHUNCH_API_URL` | Default: `https://api.bloghunch.com/api/v1` |
-| `BLOGHUNCH_SUBDOMAIN`| (Optional) The specific publication subdomain to scope the tools to. |
+### 1. Build
 
-## Available Tools
+```bash
+npm install
+npm run build
+```
 
-### Content Tools
--   `bh_create_post`: Create manual or AI-generated posts. Provide a `topic` to trigger the **Pro** orchestration flow.
--   `bh_list_posts`: Search and filter your blog posts.
--   `bh_social_echo`: Generate social media assets for an existing post.
+### 2. Set environment variables on your server
 
-### SEO & Discovery Tools
--   `bh_discover_topics`: Trigger AI analysis of your Google Search Console data.
--   `bh_get_topic_discoveries`: List and filter found topic opportunities.
--   `bh_generate_ideas`: Brainstorm 5 unique angles for any topic.
+```bash
+export TRANSPORT=http
+export PORT=3001
+export MCP_SERVER_URL=https://mcp.yourdomain.com   # public HTTPS URL
+export BLOGHUNCH_API_URL=https://api.bloghunch.com/api/v1
+```
 
-### Analytics & Audience
--   `bh_get_stats`: Snapshot of 7d/30d/90d publication performance.
--   `bh_list_subscribers`: View your latest newsletter signups.
+### 3. Start the server
+
+```bash
+npm start
+# or: TRANSPORT=http node dist/index.js
+```
+
+Or with Docker:
+```bash
+docker build -t bloghunch-mcp .
+docker run -p 3001:3001 \
+  -e MCP_SERVER_URL=https://mcp.yourdomain.com \
+  bloghunch-mcp
+```
+
+### 4. Expose via Nginx/Caddy
+
+Point your domain (e.g., `mcp.yourdomain.com`) to the server on port 3001 with HTTPS.
+
+**Nginx example:**
+```nginx
+server {
+    server_name mcp.yourdomain.com;
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 300s;
+    }
+}
+```
+
+### 5. Connect in ChatGPT
+
+1. Open ChatGPT → **Settings → Apps & Connectors → Advanced settings** → enable **Developer Mode**
+2. Click **Create connector**
+3. Enter name: `Bloghunch` and URL: `https://mcp.yourdomain.com`
+4. Select **OAuth** as auth method
+5. Click **Connect** → log in with your Bloghunch API key
+6. Done ✅ — ChatGPT can now use all Bloghunch tools
+
+---
 
 ## Local Development
 
-1.  **Build**:
-    ```bash
-    npm run build
-    ```
-2.  **Run with standard IO**:
-    ```bash
-    npm start
-    ```
-    *Note: MCP servers communicate via stdio. Use stderr for diagnostic logging.*
+```bash
+# STDIO mode
+npm run dev
+
+# HTTP mode (test locally)
+npm run dev:http
+```
 
 ---
-© 2026 Bloghunch. Powering the next generation of AI-native blogging.
+
+© 2026 Bloghunch — AI-native blogging platform.
