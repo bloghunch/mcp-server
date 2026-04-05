@@ -85,7 +85,7 @@ function verifyPKCE(verifier: string, challenge: string, method = "S256"): boole
 function createMcpServer(client: ReturnType<typeof createApiClient>): Server {
   const server = new Server(
     { name: "bloghunch-mcp", version: "2.0.0" },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
