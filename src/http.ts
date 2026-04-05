@@ -245,6 +245,9 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 export async function startHttpServer(): Promise<void> {
   const app = express();
 
+  // Trust the first proxy (Nginx) to allow rate limiting to see real IPs
+  app.set("trust proxy", 1);
+
   // ── CORS ────────────────────────────────────────────────────────────────────
   app.use(
     cors({
