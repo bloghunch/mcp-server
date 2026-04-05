@@ -19,6 +19,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
   isInitializeRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 
@@ -89,6 +91,17 @@ function createMcpServer(client: ReturnType<typeof createApiClient>): Server {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     log("INFO", "tools/list requested");
     return { tools: TOOLS };
+  });
+
+  // ChatGPT calls these after tools/list — must return empty lists, not errors
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    log("INFO", "resources/list requested (returning empty)");
+    return { resources: [] };
+  });
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    log("INFO", "prompts/list requested (returning empty)");
+    return { prompts: [] };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
@@ -301,6 +314,15 @@ export async function startHttpServer(): Promise<void> {
       tokens: tokenStore.tokenCount(),
       sessions: sessions.size,
       uptime: Math.floor(process.uptime()),
+    });
+  });
+
+  // ── OAuth Protected Resource (RFC 9728) ───────────────────────────────────
+  // ChatGPT probes this before OAuth to find the authorization server
+  app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+    res.json({
+      resource: MCP_BASE_URL,
+      authorization_servers: [MCP_BASE_URL],
     });
   });
 
